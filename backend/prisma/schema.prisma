@@ -1,0 +1,141 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id               String         @id @default(cuid())
+  email            String         @unique
+  password         String?
+  name             String?
+  role             String         @default("USER")
+  kycStatus        Boolean        @default(false)
+  kycDocumentUrl   String?
+  profileImage     String?
+  biometricEnabled Boolean        @default(false)
+  failedAttempts   Int            @default(0)
+  isLocked         Boolean        @default(false)
+  transactionPin   String?        // bcrypt-hashed 4-digit PIN
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  accounts         Account[]
+  auditLogs        AuditLog[]
+  beneficiaries    Beneficiary[]  @relation("UserBeneficiaries")
+  fraudLogs        FraudLog[]
+  loans            Loan[]
+  sessions         Session[]
+  notifications    Notification[]
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  token        String   @unique
+  refreshToken String   @unique
+  expiresAt    DateTime
+  user         User     @relation(fields: [userId], references: [id])
+}
+
+model Account {
+  id                   String        @id @default(cuid())
+  userId               String
+  accountNumber        String        @unique
+  type                 String        @default("SAVINGS")
+  balance              Float         @default(0)
+  isFrozen             Boolean       @default(false)
+  interestRate         Float         @default(0.04) // 4% default for Savings
+  minimumBalance       Float         @default(1000) // ₹1000 default for Savings
+  dailyLimit           Float         @default(100000)
+  dailyTransferAmount  Float         @default(0)
+  lastTransferDate     DateTime?
+  lastInterestCredit   DateTime?
+  monthlyLimit         Float         @default(1000000)
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  user                 User          @relation(fields: [userId], references: [id])
+  receivedTransactions Transaction[] @relation("TargetAccount")
+  sentTransactions     Transaction[] @relation("SourceAccount")
+}
+
+model Transaction {
+  id              String    @id @default(cuid())
+  reference       String    @unique
+  amount          Float
+  type            String
+  status          String    @default("COMPLETED")
+  sourceAccountId String?
+  targetAccountId String?
+  description     String?
+  category        String?
+  fee             Float     @default(0)
+  metadata        String?
+  createdAt       DateTime  @default(now())
+  fraudLog        FraudLog?
+  targetAccount   Account?  @relation("TargetAccount", fields: [targetAccountId], references: [id])
+  sourceAccount   Account?  @relation("SourceAccount", fields: [sourceAccountId], references: [id])
+}
+
+model Beneficiary {
+  id            String   @id @default(cuid())
+  userId        String
+  name          String
+  accountNumber String
+  bankName      String?
+  nickname      String?
+  createdAt     DateTime @default(now())
+  user          User     @relation("UserBeneficiaries", fields: [userId], references: [id])
+}
+
+model Loan {
+  id           String    @id @default(cuid())
+  userId       String
+  type         String
+  amount       Float
+  interestRate Float
+  tenureMonths Int
+  status       String    @default("PENDING")
+  emiAmount    Float
+  remainingAmt Float
+  approvedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  user         User      @relation(fields: [userId], references: [id])
+}
+
+model FraudLog {
+  id            String       @id @default(cuid())
+  transactionId String?      @unique
+  userId        String?
+  riskScore     Int
+  reason        String
+  isFlagged     Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  user          User?        @relation(fields: [userId], references: [id])
+  transaction   Transaction? @relation(fields: [transactionId], references: [id])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  type      String   @default("INFO")  // INFO, SUCCESS, WARNING, ERROR
+  read      Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+}
